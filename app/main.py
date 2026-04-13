@@ -1,13 +1,6 @@
 """
 app/main.py
 ===========
-FastAPI application — launch from the project root with:
-    uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-
-Upgrades in this version
-------------------------
-  - DELETE /admin/users/{user_id}  — hard delete user + cascade scan history
-  - Expert advice fallback library (Gemini → fallback on quota/error)
 """
 
 from __future__ import annotations
@@ -30,7 +23,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 # ---------------------------------------------------------------------------
-# Load .env from project root
+# Load .env (local dev only — Render injects env vars directly)
 # ---------------------------------------------------------------------------
 _ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(_ROOT / ".env")
@@ -52,13 +45,39 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Directories
+# Uploads directory
 # ---------------------------------------------------------------------------
 UPLOAD_DIR = _ROOT / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 # ---------------------------------------------------------------------------
-# Gemini setup — supports both new and legacy package
+# CORS — controlled entirely by ALLOWED_ORIGINS environment variable
+#
+# HOW TO SET ON RENDER:
+# 1. Go to your Render backend service → Environment
+# 2. Add key: ALLOWED_ORIGINS
+# 3. Value:   https://your-app.streamlit.app,http://localhost:8501
+#
+# The Streamlit Cloud URL looks like:
+#   https://[your-app-name].streamlit.app
+# Copy it exactly — no trailing slash.
+# ---------------------------------------------------------------------------
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "").strip()
+
+if _raw_origins:
+    ALLOWED_ORIGINS: list[str] = [
+        o.strip() for o in _raw_origins.split(",") if o.strip()
+    ]
+    logger.info("CORS restricted to: %s", ALLOWED_ORIGINS)
+else:
+    ALLOWED_ORIGINS = ["*"]
+    logger.warning(
+        "ALLOWED_ORIGINS not set — CORS open to all origins. "
+        "Set this in Render environment variables for production."
+    )
+
+# ---------------------------------------------------------------------------
+# Gemini 1.5 Flash setup
 # ---------------------------------------------------------------------------
 _GEMINI_KEY    = os.getenv("GEMINI_API_KEY", "")
 _gemini_client = None
@@ -70,12 +89,12 @@ if _GEMINI_KEY:
         logger.info("Gemini configured via google-genai.")
     except ImportError:
         try:
-            import google.generativeai as genai
-            genai.configure(api_key=_GEMINI_KEY)
-            _gemini_client = genai
-            logger.info("Gemini configured via google-generativeai (legacy).")
+            import google.generativeai as genai_legacy
+            genai_legacy.configure(api_key=_GEMINI_KEY)
+            _gemini_client = genai_legacy.GenerativeModel("gemini-1.5-flash")
+            logger.info("Gemini 1.5 Flash configured via google-generativeai.")
         except ImportError:
-            logger.warning("No Gemini package found. Expert fallback active.")
+            logger.warning("No Gemini package found — expert fallback active.")
 else:
     logger.warning("GEMINI_API_KEY not set — expert fallback active.")
 
@@ -87,7 +106,8 @@ _GEMINI_PROMPT = (
 
 # ---------------------------------------------------------------------------
 # Expert advice fallback library
-# Priority: Gemini API → this library on any failure
+# Used automatically when Gemini API is unavailable, over quota, or
+# key is missing. The app never returns an empty advisory.
 # ---------------------------------------------------------------------------
 _EXPERT_ADVICE = {
     "Potato___Early_blight": """
@@ -161,50 +181,38 @@ No disease detected. Your plant shows healthy green foliage
 with no signs of fungal infection or blight.
 
 MAINTENANCE TIPS:
-
-  • Watering — water deeply at the base, never the leaves.
-    Morning watering is best so foliage dries during the day.
-
-  • Spacing — ensure 45–60cm between plants for good airflow.
-    Poor airflow is the leading cause of fungal disease.
-
-  • Monitoring — inspect leaves weekly, especially the underside.
-    Early detection saves the entire crop.
-
-  • Feeding — apply balanced NPK fertiliser at planting.
-    Potassium strengthens cell walls and improves resistance.
-
-  • Crop rotation — never plant potatoes in the same bed
-    two seasons running. Rotate with legumes or brassicas.
-
-  • Mulching — apply straw mulch to prevent soil splash
-    which carries fungal spores onto lower leaves.
+  • Water deeply at the base — never wet the foliage.
+  • Ensure 45–60cm spacing between plants for good airflow.
+  • Inspect leaves weekly, especially the underside.
+  • Apply balanced NPK fertiliser at planting.
+  • Rotate crops — never plant potatoes in the same bed two seasons running.
+  • Apply straw mulch to prevent soil splash onto lower leaves.
 """
 
 
 def _get_gemini_advice(disease_class: str) -> str:
     """
     Returns agricultural advice for the detected disease.
-    Attempts Gemini API first — falls back to expert library
-    on any failure (quota, invalid key, network error).
+    Tries Gemini 1.5 Flash first — falls back to expert library on any failure.
     """
     if disease_class == "Potato___healthy":
         return _HEALTHY_ADVICE
 
     if _gemini_client is not None:
         try:
-            display = inf.DISPLAY_NAMES.get(disease_class, disease_class)
-            prompt  = _GEMINI_PROMPT.format(disease=display)
+            display  = inf.DISPLAY_NAMES.get(disease_class, disease_class)
+            prompt   = _GEMINI_PROMPT.format(disease=display)
             if hasattr(_gemini_client, "models"):
                 response = _gemini_client.models.generate_content(
-                    model="gemini-1.5-flash",
-                    contents=prompt,
+                    model="gemini-1.5-flash", contents=prompt,
                 )
             else:
                 response = _gemini_client.generate_content(prompt)
             return response.text
         except Exception as exc:
-            logger.warning("Gemini unavailable (%s) — using expert library.", exc)
+            logger.warning(
+                "Gemini 1.5 Flash unavailable (%s) — using expert library.", exc
+            )
 
     return _EXPERT_ADVICE.get(
         disease_class,
@@ -217,15 +225,20 @@ def _get_gemini_advice(disease_class: str) -> str:
 # ---------------------------------------------------------------------------
 app = FastAPI(
     title="PotatoGuard AI — Disease Detection API",
+    description=(
+        "REST API for potato leaf disease classification using "
+        "INT8-quantized EfficientNetB0 TFLite + Gemini 1.5 Flash advisory."
+    ),
     version="3.0.0",
 )
 
+# CORS middleware — MUST be added before any routes
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins    =ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods    =["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers    =["Authorization", "Content-Type", "Accept"],
 )
 
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
@@ -233,19 +246,20 @@ app.include_router(auth_router)
 
 
 # ---------------------------------------------------------------------------
-# Startup
+# Startup — tables created here
 # ---------------------------------------------------------------------------
 @app.on_event("startup")
 def on_startup() -> None:
-    logger.info("Initialising database…")
+    logger.info("Connecting to database and creating tables...")
     init_db()
-    logger.info("Pre-loading TFLite model…")
+    logger.info("Database tables ready.")
+    logger.info("Pre-loading TFLite model into memory...")
     inf.load_model()
-    logger.info("API ready — docs at http://127.0.0.1:8000/docs")
+    logger.info("API ready → /docs")
 
 
 # ---------------------------------------------------------------------------
-# Pydantic schemas
+# Pydantic response schemas
 # ---------------------------------------------------------------------------
 class PredictOut(BaseModel):
     id              : int
@@ -267,23 +281,26 @@ class AdminStats(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# User profile
+# Routes
 # ---------------------------------------------------------------------------
+@app.get("/", tags=["Health"])
+def root():
+    """Health check endpoint — confirms API is running."""
+    return {"status": "ok", "message": "PotatoGuard AI API is running."}
+
+
 @app.get("/users/me", response_model=UserOut, tags=["Users"])
 def get_me(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
-# ---------------------------------------------------------------------------
-# /predict
-# ---------------------------------------------------------------------------
 @app.post("/predict", response_model=PredictOut, tags=["Inference"])
 async def predict(
     file        : UploadFile = File(...),
     current_user: User       = Depends(get_current_user),
     db          : Session    = Depends(get_db),
 ) -> ScanHistory:
-    """Upload a potato leaf image → TFLite diagnosis + advisory."""
+    """Upload a potato leaf image → TFLite diagnosis + Gemini 1.5 Flash advice."""
 
     if file.content_type not in {"image/jpeg", "image/png", "image/webp"}:
         raise HTTPException(
@@ -322,9 +339,6 @@ async def predict(
     return scan
 
 
-# ---------------------------------------------------------------------------
-# /history
-# ---------------------------------------------------------------------------
 @app.get("/history", response_model=list[PredictOut], tags=["Inference"])
 def get_history(
     current_user: User    = Depends(get_current_user),
@@ -340,9 +354,6 @@ def get_history(
     )
 
 
-# ---------------------------------------------------------------------------
-# Admin — stats
-# ---------------------------------------------------------------------------
 @app.get("/admin/stats", response_model=AdminStats, tags=["Admin"])
 def admin_stats(
     _  : User    = Depends(require_admin),
@@ -350,7 +361,7 @@ def admin_stats(
 ) -> AdminStats:
     total_users = db.query(func.count(User.id)).scalar()
     total_scans = db.query(func.count(ScanHistory.id)).scalar()
-    rows        = (
+    rows = (
         db.query(ScanHistory.disease_type, func.count(ScanHistory.id))
         .group_by(ScanHistory.disease_type)
         .all()
@@ -362,9 +373,6 @@ def admin_stats(
     )
 
 
-# ---------------------------------------------------------------------------
-# Admin — list users
-# ---------------------------------------------------------------------------
 @app.get("/admin/users", response_model=list[UserOut], tags=["Admin"])
 def admin_list_users(
     _  : User    = Depends(require_admin),
@@ -373,50 +381,28 @@ def admin_list_users(
     return db.query(User).order_by(User.created_at.desc()).all()
 
 
-# ---------------------------------------------------------------------------
-# Admin — delete user (hard delete + cascade scan history)
-# ---------------------------------------------------------------------------
 @app.delete("/admin/users/{user_id}", status_code=204, tags=["Admin"])
 def admin_delete_user(
     user_id: int,
     _      : User    = Depends(require_admin),
     db     : Session = Depends(get_db),
 ) -> None:
-    """
-    Permanently delete a user and ALL their associated scan records.
-
-    Cascade strategy: Hard delete via SQLAlchemy relationship cascade
-    ('all, delete-orphan') + DB-level ON DELETE CASCADE on the FK.
-    Both layers ensure no orphaned ScanHistory rows remain.
-    Image files on disk are also removed to prevent storage bloat.
-    Admin accounts cannot delete themselves.
-    """
-    current_admin = db.query(User).filter(User.id == _.id).first()
     user = db.query(User).filter(User.id == user_id).first()
-
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
-
     if user.role == "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin accounts cannot be deleted via the API.",
         )
-
-    # Remove image files from disk before deleting DB records
     scans = db.query(ScanHistory).filter(ScanHistory.user_id == user_id).all()
     for scan in scans:
         if scan.image_path:
             (_ROOT / scan.image_path).unlink(missing_ok=True)
-
-    db.delete(user)   # cascade handles ScanHistory rows automatically
+    db.delete(user)
     db.commit()
-    logger.info("User %s (id=%s) deleted by admin.", user.email, user_id)
 
 
-# ---------------------------------------------------------------------------
-# Admin — delete individual scan
-# ---------------------------------------------------------------------------
 @app.delete("/admin/scans/{scan_id}", status_code=204, tags=["Admin"])
 def admin_delete_scan(
     scan_id: int,

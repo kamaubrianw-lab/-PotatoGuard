@@ -1,12 +1,6 @@
 """
 app/database.py
 ===============
-
-Schema
-------
-  User        : id, email (unique login), hashed_password, role, created_at
-  ScanHistory : id, user_id (FK), email, disease_type, confidence_score,
-                llm_advice, timestamp, image_path
 """
 
 from __future__ import annotations
@@ -27,51 +21,85 @@ from sqlalchemy.orm import (
 )
 
 # ---------------------------------------------------------------------------
-# Load .env — must happen before reading DATABASE_URL
+# Load .env for local development
+# Render and Supabase inject DATABASE_URL directly as an env var —
+# load_dotenv() is a no-op in production (env var already set)
 # ---------------------------------------------------------------------------
-_ROOT = Path(__file__).resolve().parent.parent          # potato_disease_app/
+_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(_ROOT / ".env")
 
 # ---------------------------------------------------------------------------
-# Engine
+# DATABASE_URL — switches automatically between SQLite and PostgreSQL
+#
+# Local dev  : leave DATABASE_URL unset → SQLite file is used
+# Production : set DATABASE_URL in Render to your Supabase connection string
+#
+# Supabase connection string format (from Supabase dashboard → Settings → Database):
+#   postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-REF].supabase.co:5432/postgres
+#
+# CRITICAL FIX: Some providers (Heroku, older Supabase) return URLs starting
+# with "postgres://" — SQLAlchemy 2.0 requires "postgresql://"
+# The line below fixes this automatically.
 # ---------------------------------------------------------------------------
 DATABASE_URL: str = os.getenv(
     "DATABASE_URL",
     f"sqlite:///{_ROOT / 'potato_disease.db'}",
 )
 
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False},
-    echo=False,
-)
+# Fix legacy "postgres://" prefix — SQLAlchemy 2.0 requires "postgresql://"
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+_IS_SQLITE = DATABASE_URL.startswith("sqlite")
+
+# ---------------------------------------------------------------------------
+# Engine — different configuration for SQLite vs PostgreSQL
+# ---------------------------------------------------------------------------
+if _IS_SQLITE:
+    engine = create_engine(
+        DATABASE_URL,
+        connect_args={"check_same_thread": False},  # SQLite only
+        echo=False,
+    )
+else:
+    # PostgreSQL — connection pooling for production resilience
+    # pool_pre_ping reconnects automatically if a connection goes stale
+    # (common with Supabase which closes idle connections after ~5 minutes)
+    engine = create_engine(
+        DATABASE_URL,
+        pool_size=5,
+        max_overflow=10,
+        pool_pre_ping=True,
+        pool_recycle=300,   # recycle connections every 5 mins
+        echo=False,
+    )
 
 
 @event.listens_for(engine, "connect")
-def _set_pragmas(dbapi_conn, _record) -> None:
+def _configure_connection(dbapi_conn, _record) -> None:
     """
-    Enable WAL mode + foreign keys on every new SQLite connection.
-    WAL mode prevents 'database is locked' when Streamlit reads
-    simultaneously while FastAPI writes.
+    SQLite only: enable WAL mode + foreign key enforcement.
+    PostgreSQL handles both of these natively — no action needed.
     """
-    cur = dbapi_conn.cursor()
-    cur.execute("PRAGMA journal_mode=WAL;")
-    cur.execute("PRAGMA foreign_keys=ON;")
-    cur.close()
+    if _IS_SQLITE:
+        cur = dbapi_conn.cursor()
+        cur.execute("PRAGMA journal_mode=WAL;")
+        cur.execute("PRAGMA foreign_keys=ON;")
+        cur.close()
 
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 # ---------------------------------------------------------------------------
-# Declarative base  (SQLAlchemy 2.0 style)
+# Declarative base (SQLAlchemy 2.0 Mapped style)
 # ---------------------------------------------------------------------------
 class Base(DeclarativeBase):
     pass
 
 
 # ---------------------------------------------------------------------------
-# Models — using Mapped[T] + mapped_column() throughout
+# Models
 # ---------------------------------------------------------------------------
 class User(Base):
     """
@@ -79,19 +107,18 @@ class User(Base):
     Login identifier : email  (unique, indexed)
     Roles            : 'user' | 'admin'
     """
-
     __tablename__ = "users"
 
     id             : Mapped[int]      = mapped_column(primary_key=True, index=True)
-    email          : Mapped[str]      = mapped_column(String(255), unique=True,
-                                                      index=True, nullable=False)
+    email          : Mapped[str]      = mapped_column(
+                                            String(255), unique=True,
+                                            index=True, nullable=False)
     hashed_password: Mapped[str]      = mapped_column(String(255), nullable=False)
-    role           : Mapped[str]      = mapped_column(String(50),  default="user")
+    role           : Mapped[str]      = mapped_column(String(50), default="user")
     created_at     : Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        nullable=False,
-    )
+                                            DateTime(timezone=True),
+                                            default=lambda: datetime.now(timezone.utc),
+                                            nullable=False)
 
     scans: Mapped[List["ScanHistory"]] = relationship(
         back_populates="owner",
@@ -104,26 +131,22 @@ class User(Base):
 
 class ScanHistory(Base):
     """One row per leaf-image scan submitted by a user."""
-
     __tablename__ = "scan_history"
 
-    id              : Mapped[int]            = mapped_column(primary_key=True, index=True)
-    user_id         : Mapped[int]            = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    email           : Mapped[str]            = mapped_column(String(255),
-                                                              nullable=False, index=True)
-    disease_type    : Mapped[str]            = mapped_column(String(100), nullable=False)
-    confidence_score: Mapped[float]          = mapped_column(Float,       nullable=False)
-    llm_advice      : Mapped[Optional[str]]  = mapped_column(Text,        nullable=True)
-    image_path      : Mapped[Optional[str]]  = mapped_column(String(500), nullable=True)
-    timestamp       : Mapped[datetime]       = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        nullable=False,
-    )
+    id              : Mapped[int]           = mapped_column(primary_key=True, index=True)
+    user_id         : Mapped[int]           = mapped_column(
+                                                 ForeignKey("users.id", ondelete="CASCADE"),
+                                                 nullable=False, index=True)
+    email           : Mapped[str]           = mapped_column(
+                                                 String(255), nullable=False, index=True)
+    disease_type    : Mapped[str]           = mapped_column(String(100), nullable=False)
+    confidence_score: Mapped[float]         = mapped_column(Float, nullable=False)
+    llm_advice      : Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    image_path      : Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    timestamp       : Mapped[datetime]      = mapped_column(
+                                                 DateTime(timezone=True),
+                                                 default=lambda: datetime.now(timezone.utc),
+                                                 nullable=False)
 
     owner: Mapped["User"] = relationship(back_populates="scans")
 
@@ -138,7 +161,6 @@ class ScanHistory(Base):
 # Helpers
 # ---------------------------------------------------------------------------
 def init_db() -> None:
-    """Create all tables (idempotent). Called once on FastAPI startup."""
     Base.metadata.create_all(bind=engine)
 
 

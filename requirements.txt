@@ -1,28 +1,32 @@
-# ── FastAPI backend ──────────────────────────────────────────────
+# ============================================================
+# requirements.txt — PotatoGuard AI Backend
+# Target: Render.com (Python 3.11, Linux)
+# ============================================================
+
+# ── FastAPI & server ─────────────────────────────────────────
 fastapi
 uvicorn[standard]
-python-multipart      # Required for OAuth2 form-based login
+python-multipart
 
-# ── Auth & security ──────────────────────────────────────────────
+# ── Auth & security ──────────────────────────────────────────
 passlib[bcrypt]
 python-jose[cryptography]
 
-# ── Database ─────────────────────────────────────────────────────
+# ── Database ─────────────────────────────────────────────────
 sqlalchemy
+psycopg2-binary          # PostgreSQL driver for Supabase
 
-# ── TF inference  ────────────────────────────────
-tensorflow             # Full TF — uncomment if tflite-runtime fails
+# ── TFLite inference ─────────────────────────────────────────
+tflite-runtime
+# tensorflow
 
-# ── Image processing ─────────────────────────────────────────────
+# ── Image processing ─────────────────────────────────────────
 Pillow
 numpy
 
-# ── Gemini LLM ───────────────────────────────────────────────────
+# ── Gemini 1.5 Flash ─────────────────────────────────────────
 google-generativeai
+google-genai
 
-# ── Streamlit frontend ───────────────────────────────────────────
-streamlit
-requests
-
-# ── Utilities ────────────────────────────────────────────────────
+# ── Utilities ────────────────────────────────────────────────
 python-dotenv
