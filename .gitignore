@@ -1,34 +1,33 @@
-# Secrets — never commit
+# ── Secrets ─────────────────────────────────────────────────────
 .env
 
-# Database
-*.db
-*.sqlite3
-
-# Uploaded user images
-uploads/*
-!uploads/.gitkeep
-
-# Model file (too large for git — store separately)
-models/*.tflite
-!models/.gitkeep
-
-# Python
+# ── Python cache ─────────────────────────────────────────────────
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-.Python
 
-# Virtual environment
+# ── User uploads ─────────────────────────────────────────────────
+uploads/*
+!uploads/.gitkeep
+
+# ── Model file (too large for git) ───────────────────────────────
+models/*.tflite
+!models/.gitkeep
+
+# ── Database ─────────────────────────────────────────────────────
+*.db
+*.sqlite3
+
+# ── Virtual environment ──────────────────────────────────────────
 venv/
 env/
 .venv/
 
-# VS Code
-.vscode/settings.json
-.vscode/launch.json
+# ── IDE ──────────────────────────────────────────────────────────
+.vscode/
+.idea/
 
-# OS
+# ── OS ───────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db

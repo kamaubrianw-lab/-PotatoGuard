@@ -1,3 +1,6 @@
 # app/__init__.py
-# Makes `app` a Python package so imports like `from app.auth import ...` work
-# when running `uvicorn app.main:app` from the project root.
+# Marks `app` as a Python package.
+# Required for:
+#   - relative imports (from . import database)
+#   - uvicorn app.main:app  to resolve correctly
+#   - python -m app.seed_admin  to work from the project root

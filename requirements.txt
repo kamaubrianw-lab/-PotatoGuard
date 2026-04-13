@@ -1,28 +1,28 @@
 # ── FastAPI backend ──────────────────────────────────────────────
-fastapi==0.111.0
-uvicorn[standard]==0.29.0
-python-multipart==0.0.9       # Required for OAuth2 form-based login
+fastapi
+uvicorn[standard]
+python-multipart      # Required for OAuth2 form-based login
 
 # ── Auth & security ──────────────────────────────────────────────
-passlib[bcrypt]==1.7.4
-python-jose[cryptography]==3.3.0
+passlib[bcrypt]
+python-jose[cryptography]
 
 # ── Database ─────────────────────────────────────────────────────
-sqlalchemy==2.0.30
+sqlalchemy
 
 # ── TF inference  ────────────────────────────────
 tensorflow             # Full TF — uncomment if tflite-runtime fails
 
 # ── Image processing ─────────────────────────────────────────────
-Pillow==10.3.0
-numpy==1.26.4
+Pillow
+numpy
 
 # ── Gemini LLM ───────────────────────────────────────────────────
-google-generativeai==0.5.4
+google-generativeai
 
 # ── Streamlit frontend ───────────────────────────────────────────
-streamlit==1.35.0
-requests==2.32.2
+streamlit
+requests
 
 # ── Utilities ────────────────────────────────────────────────────
-python-dotenv==1.0.1
+python-dotenv
