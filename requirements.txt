@@ -6,6 +6,7 @@
 # ── FastAPI & server ─────────────────────────────────────────
 fastapi
 uvicorn[standard]
+gunicorn
 python-multipart
 
 # ── Auth & security ──────────────────────────────────────────
@@ -17,8 +18,7 @@ sqlalchemy
 psycopg2-binary          # PostgreSQL driver for Supabase
 
 # ── TFLite inference ─────────────────────────────────────────
-tflite-runtime
-# tensorflow
+tensorflow-cpu
 
 # ── Image processing ─────────────────────────────────────────
 Pillow
