@@ -90,14 +90,16 @@ class _TFLiteInterpreter:
             logger.info("Loaded via tflite-runtime.")
         except ImportError:
             try:
-                import tensorflow as tf                    # type: ignore
-                Interpreter = tf.lite.Interpreter
-                logger.info("Loaded via tensorflow.lite (tflite-runtime not found).")
-            except ImportError as exc:
-                raise RuntimeError(
-                    "Neither tflite-runtime nor tensorflow is installed.\n"
-                    "Run:  pip install tflite-runtime"
-                ) from exc
+                import ai_edge_litert.interpreter as tflite  # type: ignore
+                Interpreter = tflite.Interpreter
+                logger.info("Loaded via ai-edge-litert.")
+            except ImportError:
+                try:
+                    import tensorflow as tf  # type: ignore
+                    Interpreter = tf.lite.Interpreter
+                    logger.info("Loaded via TensorFlow.")
+                except Exception as e:
+                    raise RuntimeError("No TFLite interpreter available") from e
 
         self._interp         = Interpreter(model_path=str(MODEL_PATH))
         self._interp.allocate_tensors()

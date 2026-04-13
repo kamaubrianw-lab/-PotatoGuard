@@ -3,6 +3,10 @@
 # Target: Render.com (Python 3.11, Linux)
 # ============================================================
 
+# Build Tools
+setuptools>=68.0.0
+wheel
+
 # ── FastAPI & server ─────────────────────────────────────────
 fastapi
 uvicorn[standard]
@@ -18,11 +22,11 @@ sqlalchemy
 psycopg2-binary          # PostgreSQL driver for Supabase
 
 # ── TFLite inference ─────────────────────────────────────────
-tensorflow-cpu
+ai-edge-litert
 
 # ── Image processing ─────────────────────────────────────────
-Pillow
-numpy
+Pillow=10.0.0
+numpy>=1.23.5
 
 # ── Gemini 1.5 Flash ─────────────────────────────────────────
 google-generativeai
