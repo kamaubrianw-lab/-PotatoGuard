@@ -14,7 +14,8 @@ gunicorn
 python-multipart
 
 # ── Auth & security ──────────────────────────────────────────
-passlib[bcrypt]
+passlib[bcrypt]==1.7.4
+bcrypt==3.1.7
 python-jose[cryptography]
 
 # ── Database ─────────────────────────────────────────────────
