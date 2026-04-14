@@ -15,7 +15,7 @@ from datetime import datetime
 # ---------------------------------------------------------------------------
 # 1. Config & Theme Mapping
 # ---------------------------------------------------------------------------
-API_BASE = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
+API_BASE = os.getenv("API_BASE_URL", "https://potatoguard-1.onrender.com/")
 
 CLASS_DISPLAY = {
     "Potato___Early_blight": "🍂 Early Blight",
