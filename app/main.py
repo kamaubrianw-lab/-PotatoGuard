@@ -62,19 +62,7 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 #   https://[your-app-name].streamlit.app
 # Copy it exactly — no trailing slash.
 # ---------------------------------------------------------------------------
-_raw_origins = os.getenv("ALLOWED_ORIGINS", "").strip()
-
-if _raw_origins:
-    ALLOWED_ORIGINS: list[str] = [
-        o.strip() for o in _raw_origins.split(",") if o.strip()
-    ]
-    logger.info("CORS restricted to: %s", ALLOWED_ORIGINS)
-else:
-    ALLOWED_ORIGINS = ["*"]
-    logger.warning(
-        "ALLOWED_ORIGINS not set — CORS open to all origins. "
-        "Set this in Render environment variables for production."
-    )
+ALLOWED_ORIGINS = ["https://potatoguard-1.onrender.com"]
 
 # ---------------------------------------------------------------------------
 # Gemini 1.5 Flash setup
