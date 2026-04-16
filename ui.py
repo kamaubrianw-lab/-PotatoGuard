@@ -18,8 +18,8 @@ from datetime import datetime
 API_BASE = os.getenv("API_BASE_URL", "https://potatoguard-1.onrender.com/")
 
 if not os.getenv("STREAMLIT_RUNTIME_ENV"):
-    API_BASE = "http://localhost:8000/"
-    
+    API_BASE = "http://localhost:8000"
+
 CLASS_DISPLAY = {
     "Potato___Early_blight": "🍂 Early Blight",
     "Potato___Late_blight" : "🌧️ Late Blight",
