@@ -15,10 +15,8 @@ from datetime import datetime
 # ---------------------------------------------------------------------------
 # 1. Config & Theme Mapping
 # ---------------------------------------------------------------------------
-if not os.getenv("STREAMLIT_RUNTIME_ENV"):
-    API_BASE = "http://localhost:8000"
-else:
-    API_BASE = "https://potatoguard-1.onrender.com/"
+
+API_BASE = "https://potatoguard-1.onrender.com/"
 
 CLASS_DISPLAY = {
     "Potato___Early_blight": "🍂 Early Blight",
