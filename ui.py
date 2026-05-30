@@ -16,7 +16,7 @@ from datetime import datetime
 # 1. Config & Theme Mapping
 # ---------------------------------------------------------------------------
 
-API_BASE = "https://potatoguard-1.onrender.com/"
+API_BASE = "https://potatoguard-1.onrender.com"
 
 CLASS_DISPLAY = {
     "Potato___Early_blight": "🍂 Early Blight",
